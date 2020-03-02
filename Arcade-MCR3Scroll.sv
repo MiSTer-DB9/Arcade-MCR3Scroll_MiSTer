@@ -129,9 +129,8 @@ localparam CONF_STR = {
 	"OUV,Serial SNAC DB9MD,Off,1 Player,2 Players;",	
 	"-;",
 	"H2OA,Accelerator,Digital,Analog;",
-	"H2OB,Steering,Digital,Analog;",
+	"H2OBC,Steering,Digital,Analog X,Paddle;",
 	"h1O9,Show Lamps,Off,On;",
-	"h2OA,Rotation,Buttons,Spinner;",
 	"-;",
 	"DIP;",
 	"-;",
@@ -204,6 +203,8 @@ wire [31:0] joy2 =  status[31]    ? {
 wire [31:0] joy = joy1 | joy2;
 wire [15:0] joy1a, joy2a;
 wire [15:0] joy_a = jn ? joy2a : joy1a;
+wire  [8:0] sp1, sp2;
+wire  [7:0] pd1, pd2;
 
 wire [21:0] gamma_bus;
 
@@ -244,6 +245,12 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.joystick_analog_0(joy1a),
 	.joystick_analog_1(joy2a),
 	.joy_raw({joydb9md_1[4],joydb9md_1[6],joydb9md_1[3:0]}),
+	.spinner_0(sp1),
+	.spinner_1(sp2),
+
+	.paddle_0(pd1),
+	.paddle_1(pd2),
+
 .ps2_key(ps2_key)
 );
 
@@ -463,6 +470,34 @@ wire m_shift   = m_shift1 | m_shift2;
 wire m_spccw   = m_spccw1 | m_spccw2;
 wire m_spcw    = m_spcw1  | m_spcw2;
 
+reg [8:0] sp;
+always @(posedge clk_sys) begin
+	reg [8:0] old_sp1, old_sp2;
+	reg       sp_sel = 0;
+
+	old_sp1 <= sp1;
+	old_sp2 <= sp2;
+	
+	if(old_sp1 != sp1) sp_sel <= 0;
+	if(old_sp2 != sp2) sp_sel <= 1;
+
+	sp <= sp_sel ? sp2 : sp1;
+end
+
+reg [8:0] pd;
+always @(posedge clk_sys) begin
+	reg [8:0] old_pd1, old_pd2;
+	reg       pd_sel = 0;
+
+	old_pd1 <= pd1;
+	old_pd2 <= pd2;
+	
+	if(old_pd1 != pd1) pd_sel <= 0;
+	if(old_pd2 != pd2) pd_sel <= 1;
+
+	pd <= pd_sel ? pd2 : pd1;
+end
+
 reg  [7:0] input_0;
 reg  [7:0] input_1;
 reg  [7:0] input_2;
@@ -501,12 +536,12 @@ always @(*) begin
 	if (mod_spyhnt) begin
 		input_0 = ~{ service, 2'b00, m_shift, 2'b00, 1'b0, m_coin1 };
 		input_1 = ~{ 3'b000, m_fire_a, m_fire_c, m_fire_e, m_fire_b, m_fire_d };
-		input_2 = output_4[7] ? (status[11] ? steering_ana : steering_emu) : (status[10] ? gas_ana : gas_emu);
+		input_2 = output_4[7] ? (!status[12:11] ? steering_emu : status[11] ? steeringX : steeringP) : (status[10] ? gas_ana : gas_emu);
 	end
 	else if (mod_turbo) begin
 		input_0 = ~{ service, 2'b00, status[10] ? ~joy_a[15] : m_shift, 2'b00, 1'b0, m_coin1 };
 		input_1 = ~{ 3'b000, m_fire_e, m_fire_d, m_fire_c, m_fire_b, m_fire_a };
-		input_2 = output_4[7] ? (status[11] ? steering_ana : steering_emu) : (status[10] ? gas_ana : gas_emu);
+		input_2 = output_4[7] ? (!status[12:11] ? steering_emu : status[11] ? steeringX : steeringP) : (status[10] ? gas_ana : gas_emu);
 	end
 	else if (mod_crater) begin
 		landscape = 1;
@@ -591,7 +626,7 @@ mcr3scroll mcr3scroll
 	.dl_data      ( ioctl_dout )
 );
 
-wire  [7:0] steering_ana, steering_emu;
+wire  [7:0] steeringX, steeringP, steering_emu;
 wire  [7:0] gas_ana, gas_emu;
 
 steering_control steering_control
@@ -609,17 +644,18 @@ steering_control steering_control
 
 wire [7:0] gas = joy_a[15] ? (8'h00 - joy_a[15:8]) : mod_turbo ? joy_a[15:8] : 8'h00;
 assign gas_ana = {gas[6:0], 1'b1};
-assign steering_ana = {joy_a[7],joy_a[7:1]} + 8'h70;
+assign steeringX = 8'h70 + {joy_a[7],joy_a[7:1]};
+assign steeringP = 8'h70 + {~pd[7],~pd[7],pd[6:1]};
 
 wire [7:0] spin_angle;
-spinner #(-10) spinner (
+spinner #(-5, 0, -5) spinner (
 	.clk(clk_sys),
 	.reset(reset),
 	.minus(m_left | m_spccw),
 	.plus(m_right | m_spcw),
 	.strobe(vs),
-	.use_spinner(status[10] | m_spccw | m_spcw),
-	.spin_angle(spin_angle)
+	.spin_in(sp),
+	.spin_out(spin_angle)
 );
 
 reg jn = 0;
