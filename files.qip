@@ -15,3 +15,4 @@ set_global_assignment -name VHDL_FILE rtl/mcr_sound_board.vhd
 set_global_assignment -name VHDL_FILE rtl/mcr3scroll.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE Arcade-MCR3Scroll.sv
 set_global_assignment -name VERILOG_FILE rtl/joydb9md.v
+set_global_assignment -name VERILOG_FILE rtl/joydb15.v
